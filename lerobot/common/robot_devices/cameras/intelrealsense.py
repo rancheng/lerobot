@@ -384,6 +384,29 @@ class IntelRealSenseCamera:
         frame = self.camera.wait_for_frames(timeout_ms=5000)
 
         color_frame = frame.get_color_frame()
+        depth_map = None
+        if self.use_depth:
+            if self.mock:
+                import tests.cameras.mock_pyrealsense2 as rs
+            else:
+                import pyrealsense2 as rs
+            align = rs.align(rs.stream.color)
+            aligned_frames = align.process(frame)
+            color_frame = aligned_frames.get_color_frame()
+            depth_frame = aligned_frames.get_depth_frame()
+            if not depth_frame:
+                raise OSError(f"Can't capture depth image from IntelRealSenseCamera({self.serial_number}).")
+
+            depth_map = np.asanyarray(depth_frame.get_data())
+
+            h, w = depth_map.shape
+            if h != self.capture_height or w != self.capture_width:
+                raise OSError(
+                    f"Can't capture depth map with expected height and width ({self.height} x {self.width}). ({h} x {w}) returned instead."
+                )
+
+            if self.rotation is not None:
+                depth_map = cv2.rotate(depth_map, self.rotation)
 
         if not color_frame:
             raise OSError(f"Can't capture color image from IntelRealSenseCamera({self.serial_number}).")
@@ -415,25 +438,11 @@ class IntelRealSenseCamera:
         # log the utc time at which the image was received
         self.logs["timestamp_utc"] = capture_timestamp_utc()
 
+        
         if self.use_depth:
-            depth_frame = frame.get_depth_frame()
-            if not depth_frame:
-                raise OSError(f"Can't capture depth image from IntelRealSenseCamera({self.serial_number}).")
-
-            depth_map = np.asanyarray(depth_frame.get_data())
-
-            h, w = depth_map.shape
-            if h != self.capture_height or w != self.capture_width:
-                raise OSError(
-                    f"Can't capture depth map with expected height and width ({self.height} x {self.width}). ({h} x {w}) returned instead."
-                )
-
-            if self.rotation is not None:
-                depth_map = cv2.rotate(depth_map, self.rotation)
-
             return color_image, depth_map
         else:
-            return color_image
+            return color_image, None
 
     def read_loop(self):
         while not self.stop_event.is_set():
