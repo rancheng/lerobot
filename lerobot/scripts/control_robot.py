@@ -136,10 +136,11 @@ python lerobot/scripts/control_robot.py \
 
 import logging
 import os
+import numpy as np
 import time
 from dataclasses import asdict
 from pprint import pformat
-
+from PIL import Image
 import rerun as rr
 
 # from safetensors.torch import load_file, save_file
@@ -174,6 +175,20 @@ from lerobot.configs import parser
 ########################################################################################
 # Control modes
 ########################################################################################
+
+def save_depth(depth_tensor, key, frame_index, episode_index, videos_dir):
+    # Convert the torch tensor to a numpy array
+    depth_array = depth_tensor.numpy().astype(np.uint16)
+
+    # Convert the numpy array to a PIL Image
+    depth_image_pil = Image.fromarray(depth_array)
+
+    # Define the path for saving the PNG file
+    path = videos_dir / f"{key}_episode_{episode_index:06d}" / f"frame_{frame_index:06d}.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save the depth image as a PNG file
+    depth_image_pil.save(str(path), quality=100)
 
 
 @safe_disconnect

@@ -500,29 +500,37 @@ class So101RobotConfig(ManipulatorRobotConfig):
 
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "laptop": OpenCVCameraConfig(
-                camera_index=0,
-                fps=30,
-                width=640,
-                height=480,
-            ),
-            "phone": OpenCVCameraConfig(
-                camera_index=1,
-                fps=30,
-                width=640,
-                height=480,
-            ),
+            # "laptop": OpenCVCameraConfig(
+            #     camera_index=0,
+            #     fps=30,
+            #     width=640,
+            #     height=480,
+            # ),
+            # "phone": OpenCVCameraConfig(
+            #     camera_index=1,
+            #     fps=30,
+            #     width=640,
+            #     height=480,
+            # ),
             "wrist_left": OpenCVCameraConfig(
-                camera_index=2, # <-- UPDATE HERE
+                camera_index=8, # <-- UPDATE HERE
                 fps=30,
                 width=640,
                 height=480,
             ),
             "wrist_right": OpenCVCameraConfig(
-                camera_index=4, # <-- UPDATE HERE
+                camera_index=10, # <-- UPDATE HERE
                 fps=30,
                 width=640,
                 height=480,
+            ),
+            "realsense_top": IntelRealSenseCameraConfig(
+                serial_number=141722079136,
+                fps=30,
+                use_depth=True,
+                width=640,
+                height=480,
+                # color_mode="bgr"
             )
         }
     )

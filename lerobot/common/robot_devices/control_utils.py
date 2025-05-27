@@ -273,6 +273,10 @@ def control_loop(
                         rr.log(f"sent_{k}_{i}", rr.Scalar(vv.numpy()))
 
             image_keys = [key for key in observation if "image" in key]
+            depth_keys = [key for key in observation if "depth" in key]
+            if depth_keys:
+                for key in depth_keys:
+                    rr.log(key, rr.Image(observation[key].numpy()), static=True)
             for key in image_keys:
                 rr.log(key, rr.Image(observation[key].numpy()), static=True)
 

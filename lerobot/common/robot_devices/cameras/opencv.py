@@ -442,14 +442,14 @@ class OpenCVCamera:
             self.thread.daemon = True
             self.thread.start()
 
-        num_tries = 0
+        num_tries = 10
         while True:
             if self.color_image is not None:
                 return self.color_image
 
             time.sleep(1 / self.fps)
             num_tries += 1
-            if num_tries > self.fps * 2:
+            if num_tries > self.fps * 20:
                 raise TimeoutError("Timed out waiting for async_read() to start.")
 
     def disconnect(self):
