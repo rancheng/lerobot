@@ -442,8 +442,8 @@ class So101RobotConfig(ManipulatorRobotConfig):
 
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "main": FeetechMotorsBusConfig(
-                port="/dev/tty.usbmodem58760431091",
+            "left": FeetechMotorsBusConfig(
+                port="/dev/ttyACM3",
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "sts3215"],
@@ -454,13 +454,25 @@ class So101RobotConfig(ManipulatorRobotConfig):
                     "gripper": [6, "sts3215"],
                 },
             ),
+            "right": FeetechMotorsBusConfig(
+                port="/dev/ttyACM0",
+                motors={
+                    # name: (index, model)
+                    "shoulder_pan": [1, "sts3215"],
+                    "shoulder_lift": [2, "sts3215"],
+                    "elbow_flex": [3, "sts3215"],
+                    "wrist_flex": [4, "sts3215"],
+                    "wrist_roll": [5, "sts3215"],
+                    "gripper": [6, "sts3215"],
+                },
+            )
         }
     )
 
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "main": FeetechMotorsBusConfig(
-                port="/dev/tty.usbmodem585A0076891",
+            "left": FeetechMotorsBusConfig(
+                port="/dev/ttyACM1",
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "sts3215"],
@@ -471,6 +483,18 @@ class So101RobotConfig(ManipulatorRobotConfig):
                     "gripper": [6, "sts3215"],
                 },
             ),
+            "right": FeetechMotorsBusConfig(
+                port="/dev/ttyACM2",
+                motors={
+                    # name: (index, model)
+                    "shoulder_pan": [1, "sts3215"],
+                    "shoulder_lift": [2, "sts3215"],
+                    "elbow_flex": [3, "sts3215"],
+                    "wrist_flex": [4, "sts3215"],
+                    "wrist_roll": [5, "sts3215"],
+                    "gripper": [6, "sts3215"],
+                },
+            )
         }
     )
 
@@ -488,6 +512,18 @@ class So101RobotConfig(ManipulatorRobotConfig):
                 width=640,
                 height=480,
             ),
+            "wrist_left": OpenCVCameraConfig(
+                camera_index=2, # <-- UPDATE HERE
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "wrist_right": OpenCVCameraConfig(
+                camera_index=4, # <-- UPDATE HERE
+                fps=30,
+                width=640,
+                height=480,
+            )
         }
     )
 
