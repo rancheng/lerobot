@@ -512,18 +512,18 @@ class So101RobotConfig(ManipulatorRobotConfig):
             #     width=640,
             #     height=480,
             # ),
-            # "wrist_left": OpenCVCameraConfig(
-            #     camera_index=8, # <-- UPDATE HERE
-            #     fps=30,
-            #     width=640,
-            #     height=480,
-            # ),
-            # "wrist_right": OpenCVCameraConfig(
-            #     camera_index=10, # <-- UPDATE HERE
-            #     fps=30,
-            #     width=640,
-            #     height=480,
-            # ),
+            "wrist_left": OpenCVCameraConfig(
+                camera_index=2, # <-- UPDATE HERE
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "wrist_right": OpenCVCameraConfig(
+                camera_index=10, # <-- UPDATE HERE
+                fps=30,
+                width=640,
+                height=480,
+            ),
             "realsense_top": IntelRealSenseCameraConfig(
                 serial_number=141722079136,
                 fps=30,

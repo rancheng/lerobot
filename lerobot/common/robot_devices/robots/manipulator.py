@@ -174,6 +174,15 @@ class ManipulatorRobot:
     def camera_features(self) -> dict:
         cam_ft = {}
         for cam_key, cam in self.cameras.items():
+            # Add depth feature if camera has depth enabled
+            if hasattr(cam, "use_depth") and cam.use_depth:
+                key = f"observation.depth.{cam_key}"
+                cam_ft[key] = {
+                    "dtype": "int32",
+                    "shape": (cam.height, cam.width),
+                    "names": ["height", "width"],
+                    "info": None,
+                }
             key = f"observation.images.{cam_key}"
             cam_ft[key] = {
                 "shape": (cam.height, cam.width, cam.channels),
