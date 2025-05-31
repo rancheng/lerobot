@@ -81,7 +81,27 @@ def main():
     }
 
     # We can then instantiate the dataset with these delta_timestamps configuration.
-    dataset = LeRobotDataset("lerobot/pusht", delta_timestamps=delta_timestamps)
+    dataset = LeRobotDataset("lerobot/pusht", delta_timestamps=delta_timestamps, video_backend="pyav")
+
+    # DEBUG: Print video path information
+    print("=== DEBUG: Video Path Information ===")
+    print(f"Dataset root: {dataset.root}")
+    print(f"Video keys: {dataset.meta.video_keys}")
+    print(f"Video path template: {dataset.meta.video_path}")
+    print(f"Video backend: {dataset.video_backend}")
+    
+    # Check first few episodes and video files
+    for ep_idx in range(min(3, dataset.meta.total_episodes)):
+        for vid_key in dataset.meta.video_keys:
+            video_path = dataset.root / dataset.meta.get_video_file_path(ep_idx, vid_key)
+            print(f"Episode {ep_idx}, Video key '{vid_key}':")
+            print(f"  Full path: {video_path}")
+            print(f"  Exists: {video_path.exists()}")
+            if video_path.exists():
+                print(f"  Size: {video_path.stat().st_size} bytes")
+            else:
+                print(f"  ERROR: Video file does not exist!")
+    print("=== END DEBUG ===")
 
     # Then we create our optimizer and dataloader for offline training.
     optimizer = torch.optim.Adam(policy.parameters(), lr=1e-4)
