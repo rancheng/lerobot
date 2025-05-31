@@ -75,6 +75,7 @@ from lerobot.common.datasets.video_utils import (
 from lerobot.common.robot_devices.robots.utils import Robot
 
 CODEBASE_VERSION = "v2.1"
+DEPTH_RESCALE_FACTOR = 0.001  # Scale factor to convert depth values to meters
 
 
 class LeRobotDatasetMetadata:
@@ -743,6 +744,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
             image_keys = self.meta.camera_keys
             for cam in image_keys:
                 item[cam] = self.image_transforms(item[cam])
+
+        # Rescale depth map to meter level (convert to meters by multiplying by DEPTH_RESCALE_FACTOR)
+        for key in item.keys():
+            if 'depth' in key.lower():
+                item[key] = item[key] * DEPTH_RESCALE_FACTOR
+                # Add channel dimension: (H, W) -> (1, H, W)
+                if item[key].dim() == 2:
+                    item[key] = item[key].unsqueeze(0)
 
         # Add task as a string
         task_idx = item["task_index"].item()
