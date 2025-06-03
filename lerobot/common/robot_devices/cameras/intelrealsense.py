@@ -18,6 +18,7 @@ This file contains utilities for recording frames from Intel Realsense cameras.
 
 import argparse
 import concurrent.futures
+import json
 import logging
 import math
 import shutil
@@ -82,6 +83,70 @@ def save_image(img_array, serial_number, frame_index, images_dir):
         logging.error(f"Failed to save image for camera {serial_number} frame {frame_index}: {e}")
 
 
+def get_camera_intrinsics(profile, mock: bool = False) -> dict:
+    """
+    Get camera intrinsics parameters from a RealSense camera profile.
+    Returns a dictionary containing both color and depth intrinsics if depth is enabled.
+    
+    Args:
+        profile: RealSense camera profile
+        mock: Whether to use mock imports for testing
+    """
+    if profile is None:
+        return {}
+    
+    if mock:
+        import tests.cameras.mock_pyrealsense2 as rs
+    else:
+        import pyrealsense2 as rs
+    
+    try:
+        color_stream = profile.get_stream(rs.stream.color)
+        color_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
+        intrinsics_dict = {
+            "color": {
+                "width": color_intrinsics.width,
+                "height": color_intrinsics.height,
+                "ppx": color_intrinsics.ppx,
+                "ppy": color_intrinsics.ppy,
+                "fx": color_intrinsics.fx,
+                "fy": color_intrinsics.fy,
+                "model": str(color_intrinsics.model),
+                "coeffs": color_intrinsics.coeffs
+            }
+        }
+        
+        # Try to get depth intrinsics if available
+        try:
+            depth_stream = profile.get_stream(rs.stream.depth)
+            depth_intrinsics = depth_stream.as_video_stream_profile().get_intrinsics()
+            intrinsics_dict["depth"] = {
+                "width": depth_intrinsics.width,
+                "height": depth_intrinsics.height,
+                "ppx": depth_intrinsics.ppx,
+                "ppy": depth_intrinsics.ppy,
+                "fx": depth_intrinsics.fx,
+                "fy": depth_intrinsics.fy,
+                "model": str(depth_intrinsics.model),
+                "coeffs": depth_intrinsics.coeffs
+            }
+            
+            # Get extrinsics between color and depth
+            extrinsics = depth_stream.get_extrinsics_to(color_stream)
+            intrinsics_dict["extrinsics"] = {
+                "rotation": extrinsics.rotation,
+                "translation": extrinsics.translation
+            }
+        except Exception:
+            # Depth stream might not be available
+            pass
+            
+        return intrinsics_dict
+    except Exception as e:
+        logging.error(f"Failed to get camera intrinsics: {e}")
+        return {}
+
+
 def save_images_from_cameras(
     images_dir: Path,
     serial_numbers: list[int] | None = None,
@@ -93,7 +158,7 @@ def save_images_from_cameras(
 ):
     """
     Initializes all the cameras and saves images to the directory. Useful to visually identify the camera
-    associated to a given serial number.
+    associated to a given serial number. Also saves camera intrinsics to meta/intrinsics.json file.
     """
     if serial_numbers is None or len(serial_numbers) == 0:
         camera_infos = find_cameras(mock=mock)
@@ -101,11 +166,14 @@ def save_images_from_cameras(
 
     if mock:
         import tests.cameras.mock_cv2 as cv2
+        import tests.cameras.mock_pyrealsense2 as rs
     else:
         import cv2
+        import pyrealsense2 as rs
 
     print("Connecting cameras")
     cameras = []
+    camera_profiles = {}  # Store profiles for intrinsics
     for cam_sn in serial_numbers:
         print(f"{cam_sn=}")
         config = IntelRealSenseCameraConfig(
@@ -117,6 +185,13 @@ def save_images_from_cameras(
             f"IntelRealSenseCamera({camera.serial_number}, fps={camera.fps}, width={camera.capture_width}, height={camera.capture_height}, color_mode={camera.color_mode})"
         )
         cameras.append(camera)
+        # Store the profile for intrinsics
+        if hasattr(camera, 'camera') and camera.camera is not None:
+            try:
+                profile = camera.camera.get_active_profile()
+                camera_profiles[cam_sn] = profile
+            except Exception as e:
+                logging.error(f"Failed to get camera profile for {cam_sn}: {e}")
 
     images_dir = Path(images_dir)
     if images_dir.exists():
@@ -124,6 +199,29 @@ def save_images_from_cameras(
             images_dir,
         )
     images_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create meta directory next to images_dir
+    meta_dir = images_dir.parent / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save intrinsics for each camera only if the file doesn't exist
+    intrinsics_file = meta_dir / "intrinsics.json"
+    if not intrinsics_file.exists():
+        intrinsics_data = {}
+        for cam_sn, profile in camera_profiles.items():
+            intrinsics = get_camera_intrinsics(profile, mock=mock)
+            if intrinsics:
+                intrinsics_data[str(cam_sn)] = intrinsics
+        
+        if intrinsics_data:
+            try:
+                with open(intrinsics_file, 'w') as f:
+                    json.dump(intrinsics_data, f, indent=2)
+                print(f"Saved camera intrinsics to {intrinsics_file}")
+            except Exception as e:
+                logging.error(f"Failed to save camera intrinsics: {e}")
+    else:
+        print(f"Camera intrinsics file already exists at {intrinsics_file}, skipping intrinsics save")
 
     print(f"Saving images to {images_dir}")
     frame_index = 0
@@ -136,11 +234,17 @@ def save_images_from_cameras(
                 for camera in cameras:
                     # If we use async_read when fps is None, the loop will go full speed, and we will end up
                     # saving the same images from the cameras multiple times until the RAM/disk is full.
-                    image = camera.read() if fps is None else camera.async_read()
-                    if image is None:
+                    color_image, _ = camera.read() if fps is None else camera.async_read()
+                    if color_image is None:
                         print("No Frame")
+                        continue
 
-                    bgr_converted_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                    if color_image.size == 0:
+                        print("Empty Frame")
+                        continue
+
+                    # Convert only if we got a valid image
+                    bgr_converted_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
 
                     executor.submit(
                         save_image,
