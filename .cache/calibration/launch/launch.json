@@ -1,0 +1,77 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "debug_vis_data_html",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lerobot/scripts/visualize_dataset_html.py",
+            "args": [
+                "--repo-id",
+                "rancheng222/so101_tie_bag"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "env": {}
+        },
+        {
+            "name": "vis_img_transforms",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lerobot/scripts/visualize_image_transforms.py",
+            "args": [
+                "--repo_id=rancheng222/so101_tie_bag",
+                "--episodes=[0]",
+                "--image_transforms.enable=True",
+                "--video_backend=pyav"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "env": {}
+        },
+        {
+            "name": "debug_tie_bag_train_act",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lerobot/scripts/train.py",
+            "args": [
+                "--dataset.repo_id=rancheng222/so101_tie_bag",
+                "--policy.type=act",
+                "--output_dir=outputs/train/act_so101_tie_bag",
+                "--job_name=act_so101_tie_bag",
+                "--policy.device=cuda",
+                "--wandb.enable=false",
+                "--dataset.video_backend=pyav"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "env": {}
+        },
+        {
+            "name": "debug_tie_bag_train_idp3",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lerobot/scripts/train.py",
+            "args": [
+                "--dataset.repo_id=rancheng222/so101_tie_bag",
+                "--policy.type=act",
+                "--output_dir=outputs/train/act_so101_tie_bag",
+                "--job_name=act_so101_tie_bag",
+                "--policy.device=cuda",
+                "--wandb.enable=false",
+                "--dataset.video_backend=pyav"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "env": {}
+        }
+    ]
+} 
