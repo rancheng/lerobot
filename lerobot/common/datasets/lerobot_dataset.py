@@ -38,6 +38,7 @@ from lerobot.common.datasets.utils import (
     DEFAULT_IMAGE_PATH,
     INFO_PATH,
     TASKS_PATH,
+    INTRINSICS_PATH,
     append_jsonlines,
     backward_compatible_episodes_stats,
     check_delta_timestamps,
@@ -64,6 +65,8 @@ from lerobot.common.datasets.utils import (
     write_episode_stats,
     write_info,
     write_json,
+    write_intrinsics,
+    load_intrinsics,
 )
 from lerobot.common.datasets.video_utils import (
     VideoFrame,
@@ -75,6 +78,7 @@ from lerobot.common.datasets.video_utils import (
 from lerobot.common.robot_devices.robots.utils import Robot
 
 CODEBASE_VERSION = "v2.1"
+DEPTH_RESCALE_FACTOR = 0.001  # Scale factor to convert depth values to meters
 
 
 class LeRobotDatasetMetadata:
@@ -103,6 +107,7 @@ class LeRobotDatasetMetadata:
 
     def load_metadata(self):
         self.info = load_info(self.root)
+        self.intrinsics = load_intrinsics(self.root)
         check_version_compatibility(self.repo_id, self._version, CODEBASE_VERSION)
         self.tasks, self.task_to_task_index = load_tasks(self.root)
         self.episodes = load_episodes(self.root)
@@ -184,6 +189,11 @@ class LeRobotDatasetMetadata:
     def camera_keys(self) -> list[str]:
         """Keys to access visual modalities (regardless of their storage method)."""
         return [key for key, ft in self.features.items() if ft["dtype"] in ["video", "image"]]
+    
+    @property
+    def depth_keys(self) -> list[str]:
+        """Keys to access depth modalities."""
+        return [key for key, ft in self.features.items() if "depth" in key]
 
     @property
     def names(self) -> dict[str, list | dict]:
@@ -744,6 +754,16 @@ class LeRobotDataset(torch.utils.data.Dataset):
             for cam in image_keys:
                 item[cam] = self.image_transforms(item[cam])
 
+        # Rescale depth map to meter level (convert to meters by multiplying by DEPTH_RESCALE_FACTOR)
+        for key in item.keys():
+            if 'depth' in key.lower():
+                item[key] = item[key] * DEPTH_RESCALE_FACTOR
+                # Add channel dimension: (H, W) -> (1, H, W)
+                if item[key].dim() == 2:
+                    item[key] = item[key].unsqueeze(0)
+                    # # change the dimension of depth map to (3, H, W)
+                    # item[key] = torch.cat([item[key], item[key], item[key]], dim=0)
+
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
@@ -944,7 +964,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def stop_image_writer(self) -> None:
         """
         Whenever wrapping this dataset inside a parallelized DataLoader, this needs to be called first to
-        remove the image_writer in order for the LeRobotDataset object to be pickleable and parallelized.
+        remove the image_writer in order for the LeRobotDataset object to be picklable and parallelized.
         """
         if self.image_writer is not None:
             self.image_writer.stop()
