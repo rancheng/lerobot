@@ -47,6 +47,7 @@ from lerobot.configs.types import DictLike, FeatureType, PolicyFeature
 DEFAULT_CHUNK_SIZE = 1000  # Max number of episodes per chunk
 
 INFO_PATH = "meta/info.json"
+INTRINSICS_PATH = "meta/intrinsics.json"
 EPISODES_PATH = "meta/episodes.jsonl"
 STATS_PATH = "meta/stats.json"
 EPISODES_STATS_PATH = "meta/episodes_stats.jsonl"
@@ -172,6 +173,17 @@ def append_jsonlines(data: dict, fpath: Path) -> None:
 
 def write_info(info: dict, local_dir: Path):
     write_json(info, local_dir / INFO_PATH)
+
+
+def write_intrinsics(intrinsics: dict, local_dir: Path):
+    write_json(intrinsics, local_dir / INTRINSICS_PATH)
+
+
+def load_intrinsics(local_dir: Path) -> dict:
+    if not (local_dir / INTRINSICS_PATH).exists():
+        return None
+    intrinsics = load_json(local_dir / INTRINSICS_PATH)
+    return intrinsics
 
 
 def load_info(local_dir: Path) -> dict:
