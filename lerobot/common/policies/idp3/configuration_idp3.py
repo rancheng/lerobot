@@ -175,7 +175,7 @@ class IDP3Config(PreTrainedConfig):
         final_norm: str = "layernorm"
         normal_channel: bool = False
         num_points: int = 4096
-        state_dim: int = 32
+        state_dim: int = 12
 
     pointcloud_encoder_cfg: PointCloudEncoderConfig = field(default_factory=PointCloudEncoderConfig)
     image_features = None  # TODO: Perhaps treat pointcloud as an environemnt state feature would fit better with the current implementation

@@ -181,7 +181,7 @@ class IDP3Model(nn.Module):
             pointcloud_encoder_cfg=config.pointcloud_encoder_cfg,
             use_pc_color=False,
             pointnet_type="multi_stage_pointnet",
-            point_downsample=False,
+            point_downsample=True,
         )
         obs_feature_dim = obs_encoder.output_shape()
         global_cond_dim = obs_feature_dim * config.n_obs_steps
