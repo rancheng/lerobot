@@ -734,7 +734,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx) -> dict:
         item = self.hf_dataset[idx]
         ep_idx = item["episode_index"].item()
-
+        # if ep_idx >= len(self.episode_data_index["from"]):
+        #     ep_idx = len(self.episode_data_index["from"]) - 1
         query_indices = None
         if self.delta_indices is not None:
             query_indices, padding = self._get_query_indices(idx, ep_idx)
@@ -757,10 +758,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
         # Rescale depth map to meter level (convert to meters by multiplying by DEPTH_RESCALE_FACTOR)
         for key in item.keys():
             if 'depth' in key.lower():
-                if item[key].dim() != 1: # 过滤observation.depth.realsense_top_is_pad的字段，dim=1
+                if item[key].dim() == 3: # 过滤observation.depth.realsense_top_is_pad的字段，dim=1
                     pointcloud = self.depth_batch_to_pointcloud_torch(
                             item[key], 604.95672, 604.57336, 326.04504, 245.83622, DEPTH_RESCALE_FACTOR)
+        
         item['observation.pointcloud'] = pointcloud
+
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
