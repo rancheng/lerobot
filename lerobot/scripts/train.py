@@ -52,7 +52,6 @@ from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.scripts.eval import eval_policy
 
-
 def update_policy(
     train_metrics: MetricsTracker,
     policy: PreTrainedPolicy,
@@ -104,6 +103,22 @@ def update_policy(
     train_metrics.update_s = time.perf_counter() - start_time
     return train_metrics, output_dict
 
+import open3d as o3d
+import matplotlib.pyplot as plt
+def vis_pointcloud(point_cloud):
+    # 转换为Open3D点云格式
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(point_cloud)
+
+    # 可选：着色（根据Z值）
+    pcd.paint_uniform_color([0.5, 0.5, 0.5])  # 灰色
+    # 或按高度着色
+    colors = plt.get_cmap("viridis")((point_cloud[:, 2] - point_cloud[:, 2].min()) / (point_cloud[:, 2].max() - point_cloud[:, 2].min()))[:, :3]
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    size=1.0, origin=[0, 0, 0])
+    # 可视化
+    o3d.visualization.draw_geometries([pcd, coordinate_frame], window_name="Open3D Point Cloud")
 
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
@@ -208,7 +223,9 @@ def train(cfg: TrainPipelineConfig):
         for key in batch:
             if isinstance(batch[key], torch.Tensor):
                 batch[key] = batch[key].to(device, non_blocking=True)
-
+        
+        # vis_pointcloud(batch['observation.pointcloud'][0,0,].cpu().numpy())
+        
         train_tracker, output_dict = update_policy(
             train_tracker,
             policy,
@@ -281,7 +298,6 @@ def train(cfg: TrainPipelineConfig):
     if eval_env:
         eval_env.close()
     logging.info("End of training")
-
 
 if __name__ == "__main__":
     init_logging()
