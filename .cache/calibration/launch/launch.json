@@ -72,6 +72,24 @@
             "justMyCode": false,
             "stopOnEntry": false,
             "env": {}
+        },
+        {
+            "name": "debug_smolvla_train",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lerobot/scripts/train.py",
+            "args": [
+                "--policy.path=lerobot/smolvla_base",
+                "--dataset.repo_id=rancheng222/so101_tie_bag",
+                "--batch_size=64",
+                "--steps=200000",
+                "--dataset.video_backend=pyav"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "env": {}
         }
     ]
 } 
