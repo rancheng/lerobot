@@ -38,6 +38,7 @@ from lerobot.common.robot_devices.utils import busy_wait
 from lerobot.common.utils.utils import get_safe_torch_device, has_method
 
 import numpy as np
+from lerobot.common.datasets.utils import depth_to_pointcloud_torch_single
 
 def log_control_info(robot: Robot, dt_s, episode_index=None, frame_index=None, fps=None):
     log_items = []
@@ -214,111 +215,6 @@ def record_episode(
         single_task=single_task,
     )
 
-def depth_to_pointcloud_torch(
-        depth_map_input,  # Now just HxW
-        fx, fy, cx, cy,
-        depth_scale=1.0,
-        device=None,
-        max_points=None
-    ):
-        """
-        Convert a single depth map (HxW, either NumPy array or PyTorch tensor) to a point cloud tensor (N_max x 3).
-        This version converts all H*W pixel points without explicit invalid depth filtering.
-
-        Args:
-            depth_map_input (numpy.ndarray or torch.Tensor): HxW depth map data.
-            fx, fy, cx, cy (float or torch.Tensor): Camera intrinsics.
-            device (str or torch.device, optional): Target device for computation and output tensor.
-                If None:
-                    - If depth_map_input is Tensor, uses its device.
-                    - If depth_map_input is NumPy array, uses CPU.
-            depth_scale (float): Scaling factor to convert depth values to meters.
-            max_points (int, optional): Maximum number of points in output point cloud (N_max).
-
-        Returns:
-            torch.Tensor: Point cloud tensor with shape (N_max, 3) on the specified or inferred device.
-        """
-        # Determine target device
-        target_device = None
-        if device is not None:
-            if isinstance(device, str):
-                target_device = torch.device(device)
-            else:
-                target_device = device
-
-        # Convert input to PyTorch tensor and move to target device
-        if isinstance(depth_map_input, np.ndarray):
-            depth_map_tensor = torch.from_numpy(depth_map_input)
-            if target_device is None:
-                target_device = torch.device("cpu")
-            depth_map_tensor = depth_map_tensor.to(target_device)
-        elif isinstance(depth_map_input, torch.Tensor):
-            depth_map_tensor = depth_map_input
-            if target_device is None:
-                try:
-                    target_device = depth_map_tensor.device
-                except AttributeError:
-                    print("Warning: Input tensor has no .device attribute, defaulting to CPU.")
-                    target_device = torch.device("cpu")
-                    depth_map_tensor = depth_map_tensor.cpu()
-            else:
-                depth_map_tensor = depth_map_tensor.to(target_device)
-        else:
-            raise TypeError("depth_map_input must be NumPy array or PyTorch tensor")
-
-        dtype = torch.float32
-        H, W = depth_map_tensor.shape
-
-        if H == 0 or W == 0:
-            N_max_for_empty = H * W if max_points is None else max_points
-            return torch.zeros((N_max_for_empty, 3), device=target_device, dtype=dtype)
-
-        # Prepare coordinates grid
-        v_coords, u_coords = torch.meshgrid(
-            torch.arange(H, device=target_device, dtype=dtype),
-            torch.arange(W, device=target_device, dtype=dtype),
-            indexing='ij'
-        )
-        Z_meters = depth_map_tensor.to(dtype=dtype)
-        if depth_scale != 1.0:
-            Z_meters = Z_meters * depth_scale
-
-        # Process intrinsics
-        intrinsics_to_process = {'fx': fx, 'fy': fy, 'cx': cx, 'cy': cy}
-        processed_intrinsics = {}
-        for name, k_val in intrinsics_to_process.items():
-            if isinstance(k_val, torch.Tensor):
-                k_val_tensor = k_val.to(device=target_device, dtype=dtype)
-            else:
-                k_val_tensor = torch.tensor(k_val, device=target_device, dtype=dtype)
-            processed_intrinsics[name] = k_val_tensor
-
-        fx_p = processed_intrinsics['fx']
-        fy_p = processed_intrinsics['fy']
-        cx_p = processed_intrinsics['cx']
-        cy_p = processed_intrinsics['cy']
-
-        # Calculate 3D points
-        X = (u_coords - cx_p) * Z_meters / fx_p
-        Y = (v_coords - cy_p) * Z_meters / fy_p
-        all_points = torch.stack((X, Y, Z_meters), dim=-1)
-
-        # Flatten
-        points_flat = all_points.view(H * W, 3)
-
-        # Handle max_points
-        num_points = H * W
-        N_max = num_points if max_points is None else max_points
-
-        if N_max == num_points:
-            return points_flat
-        elif N_max > num_points:
-            output_points = torch.zeros((N_max, 3), device=target_device, dtype=dtype)
-            output_points[:num_points] = points_flat
-            return output_points
-        else:
-            return points_flat[:N_max]
-
 @safe_stop_image_writer
 def control_loop(
     robot,
@@ -364,7 +260,9 @@ def control_loop(
             observation, action = robot.teleop_step(record_data=True)
         else:
             observation = robot.capture_observation()
-            observation["observation.pointcloud"] = depth_to_pointcloud_torch(observation['observation.depth.realsense_top'],604.95672, 604.57336, 326.04504, 245.83622, 0.001)
+            observation["observation.pointcloud"] = depth_to_pointcloud_torch_single(observation['observation.depth.realsense_top'],
+                                                                                     604.95672, 604.57336, 326.04504, 245.83622,
+                                                                                    0.001, 10000)
 
             print("observation", observation.keys())
             action = None

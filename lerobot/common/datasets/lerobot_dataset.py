@@ -77,6 +77,8 @@ from lerobot.common.datasets.video_utils import (
 )
 from lerobot.common.robot_devices.robots.utils import Robot
 
+from lerobot.common.datasets.utils import depth_batch_to_pointcloud_torch
+
 CODEBASE_VERSION = "v2.1"
 DEPTH_RESCALE_FACTOR = 0.001  # Scale factor to convert depth values to meters
 
@@ -756,134 +758,21 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 item[cam] = self.image_transforms(item[cam])
 
         # Rescale depth map to meter level (convert to meters by multiplying by DEPTH_RESCALE_FACTOR)
+        has_depth_image = False
         for key in item.keys():
             if 'depth' in key.lower():
                 if item[key].dim() == 3: # 过滤observation.depth.realsense_top_is_pad的字段，dim=1
-                    pointcloud = self.depth_batch_to_pointcloud_torch(
-                            item[key], 604.95672, 604.57336, 326.04504, 245.83622, DEPTH_RESCALE_FACTOR)
-        
-        item['observation.pointcloud'] = pointcloud
+                    pointcloud = depth_batch_to_pointcloud_torch(
+                            item[key], 604.95672, 604.57336, 326.04504, 245.83622, DEPTH_RESCALE_FACTOR, 10000)
+                    has_depth_image = True
+        if has_depth_image:
+            item['observation.pointcloud'] = pointcloud
 
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
 
         return item
-
-    def depth_batch_to_pointcloud_torch(
-        self,
-        depth_map_batch_input,
-        fx, fy, cx, cy,
-        depth_scale=1.0,
-        device=None,
-        max_points=None # 如果为 None，则 N_max 将是 H*W；否则，按此值截断/填充
-    ):
-        """
-        将一批深度图 (BxHxW，可以是 NumPy 数组或 PyTorch 张量) 转换为单个点云张量 (B x N_max x 3)。
-        此版本不显式过滤无效深度值，而是转换所有 H*W 个像素点。
-        (内联了内参处理逻辑，并灵活处理输入类型和设备)
-
-        参数:
-            depth_map_batch_input (numpy.ndarray or torch.Tensor): BxHxW 深度图数据。
-            fx, fy, cx, cy (float or torch.Tensor): 相机内参。
-            device (str or torch.device, optional): 计算和输出张量所在的设备。
-                如果为 None：
-                    - 若 depth_map_batch_input 是 Tensor，则使用其设备。
-                    - 若 depth_map_batch_input 是 NumPy array，则使用 CPU。
-            depth_scale (float): 将深度图原始值转换为米单位的缩放因子。
-            max_points (int, optional): 输出点云中每个批次项的点数 (N_max)。
-
-        返回:
-            torch.Tensor: 点云张量，形状为 (B, N_max, 3)，位于推断或指定的设备上。
-        """
-        # 确定目标设备
-        target_device = None
-        if device is not None:
-            if isinstance(device, str):
-                target_device = torch.device(device)
-            else:
-                target_device = device # 假设已经是 torch.device 对象
-        # else: target_device 保持为 None，稍后根据输入推断
-
-        # 0. 将输入转换为 PyTorch 张量并确定/移至目标设备
-        if isinstance(depth_map_batch_input, np.ndarray):
-            depth_map_batch_tensor = torch.from_numpy(depth_map_batch_input)
-            if target_device is None: # 如果用户未指定设备，NumPy 输入默认转到 CPU
-                target_device = torch.device("cpu")
-            depth_map_batch_tensor = depth_map_batch_tensor.to(target_device)
-        elif isinstance(depth_map_batch_input, torch.Tensor):
-            depth_map_batch_tensor = depth_map_batch_input
-            if target_device is None: # 用户未指定，使用输入张量自身的设备
-                try:
-                    target_device = depth_map_batch_tensor.device
-                except AttributeError:
-                    # 如果张量真的没有 .device 属性（非常罕见或旧版本），默认CPU
-                    print("警告: 输入张量没有 .device 属性，默认为 CPU。")
-                    target_device = torch.device("cpu")
-                    depth_map_batch_tensor = depth_map_batch_tensor.cpu() # 确保它在CPU上
-            else: # 用户指定了设备，则移动到该设备
-                depth_map_batch_tensor = depth_map_batch_tensor.to(target_device)
-        else:
-            raise TypeError("depth_map_batch_input 必须是 NumPy 数组或 PyTorch 张量")
-
-        dtype = torch.float32
-        B, H, W = depth_map_batch_tensor.shape
-
-        if B == 0:
-            N_max_for_empty = H * W if max_points is None else max_points
-            return torch.zeros((0, N_max_for_empty, 3), device=target_device, dtype=dtype)
-
-        # 1. 准备 Z 和坐标网格 (都在 target_device 上)
-        v_coords, u_coords = torch.meshgrid(
-            torch.arange(H, device=target_device, dtype=dtype),
-            torch.arange(W, device=target_device, dtype=dtype),
-            indexing='ij'
-        )
-        Z_meters = depth_map_batch_tensor.to(dtype=dtype) # 确保是 float32 (可能已在target_device)
-        if depth_scale != 1.0:
-            Z_meters = Z_meters * depth_scale
-
-        # 2. 内联处理内参，确保它们可广播并位于 target_device 和 dtype 上
-        intrinsics_to_process = {'fx': fx, 'fy': fy, 'cx': cx, 'cy': cy}
-        processed_intrinsics = {}
-        for name, k_val in intrinsics_to_process.items():
-            if isinstance(k_val, torch.Tensor):
-                k_val_tensor = k_val.to(device=target_device, dtype=dtype)
-            else: # Python float/int 标量
-                k_val_tensor = torch.tensor(k_val, device=target_device, dtype=dtype)
-
-            if k_val_tensor.ndim == 1 and k_val_tensor.shape[0] == B:
-                processed_intrinsics[name] = k_val_tensor.view(B, 1, 1)
-            else: # 假设是标量张量或已准备好的可广播形状
-                processed_intrinsics[name] = k_val_tensor
-
-        fx_p = processed_intrinsics['fx']
-        fy_p = processed_intrinsics['fy']
-        cx_p = processed_intrinsics['cx']
-        cy_p = processed_intrinsics['cy']
-
-        # 3. 计算所有像素对应的三维点
-        X_all = (u_coords.unsqueeze(0) - cx_p) * Z_meters / fx_p
-        Y_all = (v_coords.unsqueeze(0) - cy_p) * Z_meters / fy_p
-        all_pixels_as_points = torch.stack((X_all, Y_all, Z_meters), dim=-1)
-
-        # 4. 展平
-        all_points_flat = all_pixels_as_points.view(B, H * W, 3)
-
-        # 5. 确定 N_max
-        num_points_per_item_orig = H * W
-        N_max = num_points_per_item_orig if max_points is None else max_points
-
-        # 6. 调整大小
-        if N_max == num_points_per_item_orig:
-            output_points = all_points_flat
-        elif N_max > num_points_per_item_orig:
-            output_points = torch.zeros((B, N_max, 3), device=target_device, dtype=dtype)
-            output_points[:, :num_points_per_item_orig, :] = all_points_flat
-        else: # N_max < num_points_per_item_orig
-            output_points = all_points_flat[:, :N_max, :]
-
-        return output_points
 
     def __repr__(self):
         feature_keys = list(self.features)

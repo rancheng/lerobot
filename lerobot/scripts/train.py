@@ -106,19 +106,56 @@ def update_policy(
 import open3d as o3d
 import matplotlib.pyplot as plt
 def vis_pointcloud(point_cloud):
-    # 转换为Open3D点云格式
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(point_cloud)
+    """
+    可视化点云，并过滤掉深度（Z坐标）大于1米的点。
 
-    # 可选：着色（根据Z值）
-    pcd.paint_uniform_color([0.5, 0.5, 0.5])  # 灰色
-    # 或按高度着色
-    colors = plt.get_cmap("viridis")((point_cloud[:, 2] - point_cloud[:, 2].min()) / (point_cloud[:, 2].max() - point_cloud[:, 2].min()))[:, :3]
+    参数:
+    point_cloud (np.ndarray): 输入的点云，形状为 (N, 3)，N是点的数量。
+    """
+    # 1. 过滤点云：筛选出Z值小于等于1.0的点
+    #    这里我们假设深度是沿着Z轴度量的。
+    #    创建一个布尔掩码（mask），Z <= 1.0 的位置为True，否则为False。
+    mask = point_cloud[:, 2] <= 1.0
+    #    使用这个掩码来选择符合条件的点
+    filtered_point_cloud = point_cloud[mask]
+
+    # 检查过滤后是否还有点剩余
+    if filtered_point_cloud.shape[0] == 0:
+        print("警告：所有点都被过滤掉了，没有可显示的点云。")
+        return
+
+    # 2. 转换为Open3D点云格式
+    pcd = o3d.geometry.PointCloud()
+    #    注意：这里使用的是过滤后的点云 afiltered_point_cloud
+    pcd.points = o3d.utility.Vector3dVector(filtered_point_cloud)
+
+    # 3. 为点云着色（根据Z值）
+    #    您的原始代码中有两行着色代码，后一行会覆盖前一行。
+    #    我保留了按高度着色的代码，因为它更具信息量。
+    #    pcd.paint_uniform_color([0.5, 0.5, 0.5]) # 这行会被下面的代码覆盖，所以我注释掉了
+
+    #    使用过滤后的点云数据来计算颜色
+    #    为防止分母为0（如果所有点Z值相同），添加一个小的epsilon
+    z_values = filtered_point_cloud[:, 2]
+    z_min = z_values.min()
+    z_max = z_values.max()
+    denominator = z_max - z_min
+    if denominator < 1e-6:
+        denominator = 1.0 # 如果所有Z值都一样，则避免除以0
+
+    colors_normalized = (z_values - z_min) / denominator
+    colors = plt.get_cmap("viridis")(colors_normalized)[:, :3]
     pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    # 4. 创建坐标系以供参考
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=1.0, origin=[0, 0, 0])
-    # 可视化
-    o3d.visualization.draw_geometries([pcd, coordinate_frame], window_name="Open3D Point Cloud")
+        size=1.0, origin=[0, 0, 0])
+
+    # 5. 可视化过滤后的点云和坐标系
+    o3d.visualization.draw_geometries(
+        [pcd, coordinate_frame], 
+        window_name="Filtered Point Cloud (Z <= 1m)"
+    )
 
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):

@@ -68,7 +68,7 @@ class IDP3Policy(PreTrainedPolicy):
         """
         super().__init__(config)
         self.config = config
-        keys_to_extract = []
+        keys_to_extract = ['observation.state']
         extracted_features = {
             key: config.input_features[key] for key in keys_to_extract if key in config.input_features
         }

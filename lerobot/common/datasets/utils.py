@@ -827,3 +827,140 @@ def validate_episode_buffer(episode_buffer: dict, total_episodes: int, features:
             f"In episode_buffer not in features: {buffer_keys - set(features)}"
             f"In features not in episode_buffer: {set(features) - buffer_keys}"
         )
+
+def depth_to_pointcloud_torch_single(
+    depth_map_tensor,
+    fx, fy, cx, cy,
+    depth_scale=1.0,
+    depth_threshold_m=1.0,
+    max_points=None
+):
+    """
+    [核心函数] 将单个深度图转换为固定大小的点云，封装了过滤、截断和填充。
+    (此函数假设输入已经是正确设备和类型的 PyTorch 张量)
+
+    参数:
+        depth_map_tensor (torch.Tensor): HxW 深度图张量。
+        fx, fy, cx, cy (float): 相机内参 (标量)。
+        depth_scale (float): 深度缩放因子。
+        depth_threshold_m (float): 有效深度的最大值（米）。
+        max_points (int, optional): 输出点云的点数 (N_max)。如果为 None，N_max=H*W。
+
+    返回:
+        torch.Tensor: (N_max, 3) 的点云张量。
+    """
+    H, W = depth_map_tensor.shape
+    device = depth_map_tensor.device
+    dtype = torch.float32
+
+    # 1. 计算以米为单位的深度值
+    Z_meters = depth_map_tensor.to(dtype) * depth_scale
+
+    # 2. 创建有效点掩码 (深度 > 0 且 <= 阈值)
+    valid_mask = (Z_meters > 0) & (Z_meters <= depth_threshold_m)
+    
+    # 3. 创建坐标网格
+    v_coords, u_coords = torch.meshgrid(
+        torch.arange(H, device=device, dtype=dtype),
+        torch.arange(W, device=device, dtype=dtype),
+        indexing='ij'
+    )
+
+    # 4. 从所有张量中仅选择有效像素对应的值
+    valid_depths = Z_meters[valid_mask]
+    valid_u = u_coords[valid_mask]
+    valid_v = v_coords[valid_mask]
+    
+    # 5. 计算有效点的三维坐标 (如果存在)
+    num_valid_points = valid_depths.shape[0]
+    if num_valid_points > 0:
+        X = (valid_u - cx) * valid_depths / fx
+        Y = (valid_v - cy) * valid_depths / fy
+        valid_points = torch.stack((X, Y, valid_depths), dim=-1)
+    else:
+        # 创建一个空的 (0, 3) 张量以简化后续逻辑
+        valid_points = torch.empty((0, 3), device=device, dtype=dtype)
+
+    # 6. 根据 max_points 调整输出大小 (截断/填充)
+    N_max = H * W if max_points is None else max_points
+    output_tensor = torch.zeros((N_max, 3), device=device, dtype=dtype)
+    
+    num_to_copy = min(num_valid_points, N_max)
+    if num_to_copy > 0:
+        output_tensor[:num_to_copy, :] = valid_points[:num_to_copy, :]
+        
+    return output_tensor
+
+
+def depth_batch_to_pointcloud_torch(
+    depth_map_batch_input,
+    fx, fy, cx, cy,
+    depth_scale=1.0,
+    depth_threshold_m=1.0,
+    device=None,
+    max_points=None
+):
+    """
+    [批处理函数] 将一批深度图转换为固定大小的点云张量，完全复用核心转换逻辑。
+
+    参数:
+        depth_map_batch_input (numpy.ndarray or torch.Tensor): BxHxW 深度图。
+        fx, fy, cx, cy (float or torch.Tensor): 相机内参。可以是标量或(B,)张量。
+        depth_scale (float): 深度缩放因子。
+        depth_threshold_m (float): 有效深度的最大值（米）。
+        device (str or torch.device, optional): 目标设备。
+        max_points (int, optional): 输出点云的点数 (N_max)。如果为 None，N_max=H*W。
+
+    返回:
+        torch.Tensor: 点云张量，形状为 (B, N_max, 3)。
+    """
+    # --- 1. 输入和设备处理 ---
+    if isinstance(depth_map_batch_input, np.ndarray):
+        depth_map_batch_tensor = torch.from_numpy(depth_map_batch_input)
+        target_device = torch.device(device) if device else torch.device("cpu")
+        depth_map_batch_tensor = depth_map_batch_tensor.to(target_device)
+    elif isinstance(depth_map_batch_input, torch.Tensor):
+        depth_map_batch_tensor = depth_map_batch_input
+        target_device = torch.device(device) if device else depth_map_batch_tensor.device
+        depth_map_batch_tensor = depth_map_batch_tensor.to(target_device)
+    else:
+        raise TypeError("depth_map_batch_input 必须是 NumPy 数组或 PyTorch 张量")
+    
+    B, H, W = depth_map_batch_tensor.shape
+    dtype = torch.float32
+
+    # --- 2. 处理空批次边缘情况 ---
+    if B == 0:
+        N_max = H * W if max_points is None else max_points
+        return torch.zeros((0, N_max, 3), device=target_device, dtype=dtype)
+
+    # --- 3. 统一处理内参 ---
+    intrinsics = {}
+    for name, k_val in [('fx', fx), ('fy', fy), ('cx', cx), ('cy', cy)]:
+        if not isinstance(k_val, torch.Tensor):
+            k_val = torch.tensor(k_val, device=target_device, dtype=dtype)
+        k_val = k_val.to(target_device, dtype)
+        if k_val.ndim == 0:
+            intrinsics[name] = k_val.expand(B)
+        elif k_val.ndim == 1 and k_val.shape[0] == B:
+            intrinsics[name] = k_val
+        else:
+            raise ValueError(f"内参 {name} 的形状 {k_val.shape} 无效。应为标量或 (B,)")
+
+    # --- 4. 循环调用核心函数，收集结果 ---
+    point_clouds = []
+    for i in range(B):
+        pcd = depth_to_pointcloud_torch_single(
+            depth_map_tensor=depth_map_batch_tensor[i],
+            fx=intrinsics['fx'][i].item(),
+            fy=intrinsics['fy'][i].item(),
+            cx=intrinsics['cx'][i].item(),
+            cy=intrinsics['cy'][i].item(),
+            depth_scale=depth_scale,
+            depth_threshold_m=depth_threshold_m,
+            max_points=max_points  # 将 max_points 传递给核心函数
+        )
+        point_clouds.append(pcd)
+    
+    # --- 5. 将结果列表堆叠成一个批处理张量 ---
+    return torch.stack(point_clouds, dim=0)
