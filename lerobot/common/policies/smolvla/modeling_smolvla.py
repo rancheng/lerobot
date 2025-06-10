@@ -282,7 +282,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
 
         batch = self.normalize_inputs(batch)
 
-        self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
+        self._queues = populate_queues(self._queues, batch)
         # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
         # querying the policy.
         if len(self._queues[ACTION]) == 0:
