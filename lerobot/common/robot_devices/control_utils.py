@@ -119,6 +119,14 @@ def predict_action(observation, policy, device, use_amp):
             observation[name] = observation[name].unsqueeze(0)
             observation[name] = observation[name].to(device)
 
+            if "depth" in name:
+                # depth map is (B, 1, H, W) 
+                # we need to convert it to (B, 3, H, W) by repeating the channel dimension
+                # divided by SCALE_FACTOR (1000)
+                # and then convert to torch.float32
+                observation[name] = observation[name].repeat(1, 3, 1, 1) / 1000.0
+                observation[name] = observation[name].type(torch.float32)
+
         # Compute the next action with the policy
         # based on the current observation
         action = policy.select_action(observation)

@@ -734,7 +734,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx) -> dict:
         item = self.hf_dataset[idx]
         ep_idx = item["episode_index"].item()
-
+        # if ep_idx >= len(self.episode_data_index["from"]):
+        #     ep_idx = len(self.episode_data_index["from"]) - 1
         query_indices = None
         if self.delta_indices is not None:
             query_indices, padding = self._get_query_indices(idx, ep_idx)
@@ -756,13 +757,15 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Rescale depth map to meter level (convert to meters by multiplying by DEPTH_RESCALE_FACTOR)
         for key in item.keys():
-            if 'depth' in key.lower():
+            if 'depth' in key.lower() and item[key].dim() > 1:
                 item[key] = item[key] * DEPTH_RESCALE_FACTOR
                 # Add channel dimension: (H, W) -> (1, H, W)
                 if item[key].dim() == 2:
                     item[key] = item[key].unsqueeze(0)
-                    # # change the dimension of depth map to (3, H, W)
-                    # item[key] = torch.cat([item[key], item[key], item[key]], dim=0)
+                    # change the dimension of depth map to (3, H, W)
+                    item[key] = torch.cat([item[key], item[key], item[key]], dim=0)
+                elif item[key].dim() == 3 and item[key].shape[0] == 1:
+                    item[key] = torch.cat([item[key], item[key], item[key]], dim=0)
 
         # Add task as a string
         task_idx = item["task_index"].item()
