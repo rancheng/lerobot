@@ -136,7 +136,8 @@ class IDP3Policy(PreTrainedPolicy):
             batch = {k: torch.stack(list(self._queues[k]), dim=1) for k in batch if k in self._queues}
 
             # HACK: normalize the finger states with the control range
-            batch["observation.state"][:, :, -12:] /= 10.3
+            # batch["observation.state"][:, :, -12:] /= 10.3
+            batch = self.normalize_inputs(batch)
             actions = self.diffusion.generate_actions(batch)
 
             # TODO(rcadene): make above methods return output dictionary?
