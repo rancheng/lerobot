@@ -443,7 +443,7 @@ class So101RobotConfig(ManipulatorRobotConfig):
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "left": FeetechMotorsBusConfig(
-                port="/dev/ttyACM3",
+                port="/dev/ttyACM0",
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "sts3215"],
@@ -455,7 +455,7 @@ class So101RobotConfig(ManipulatorRobotConfig):
                 },
             ),
             "right": FeetechMotorsBusConfig(
-                port="/dev/ttyACM0",
+                port="/dev/ttyACM1",
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "sts3215"],
@@ -472,7 +472,7 @@ class So101RobotConfig(ManipulatorRobotConfig):
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "left": FeetechMotorsBusConfig(
-                port="/dev/ttyACM1",
+                port="/dev/ttyACM3",
                 motors={
                     # name: (index, model)
                     "shoulder_pan": [1, "sts3215"],
@@ -513,13 +513,13 @@ class So101RobotConfig(ManipulatorRobotConfig):
             #     height=480,
             # ),
             "wrist_left": OpenCVCameraConfig(
-                camera_index=12, # <-- UPDATE HERE
+                camera_index=8, # <-- UPDATE HERE
                 fps=30,
                 width=640,
                 height=480,
             ),
             "wrist_right": OpenCVCameraConfig(
-                camera_index=0, # <-- UPDATE HERE
+                camera_index=6, # <-- UPDATE HERE
                 fps=30,
                 width=640,
                 height=480,
